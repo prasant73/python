@@ -1,0 +1,328 @@
+How to create a basic blog in Django » Starting your application
+Navigate to your project directory, this should contain a __init__.py, manage.py, settings.py and urls.py. There may also be a few others. For reference, my project name is djangorocks, you will need to replace any references to djangorocks throughout this tutorial.
+
+Type the following into terminal, this creates a new application folder & key files we will be using for our blog.
+
+python manage.py startapp blog
+You should now have a folder called blog containing 3 files: __init__.py, models.py and views.py.
+
+Important
+
+Open up your settings.py, this is located in your project folder. Find INSTALLED_APPS and add 'blog'. You should have something similar to the following;
+
+INSTALLED_APPS = (
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.sites',
+    'djangorocks.blog',
+)
+Django now knows about your new application, all thats left to do is create it.
+
+
+
+How to create a basic blog in Django » Defining your models
+The model is your database structure. Lets start by opening the models.py file, and start adding some fields. Because I am keeping this simple, I will not be including users at this stage.
+
+class Blog(models.Model):
+    title = models.CharField(max_length=100, unique=True)
+    slug = models.SlugField(max_length=100, unique=True)
+    body = models.TextField()
+    posted = models.DateField(db_index=True, auto_now_add=True)
+    category = models.ForeignKey('blog.Category')
+
+class Category(models.Model):
+    title = models.CharField(max_length=100, db_index=True)
+    slug = models.SlugField(max_length=100, db_index=True)
+Now lets see what each part means.
+
+This creates a database table with the name "Blog". This need to be something obvious and will be used a lot.
+
+class Blog(models.Model):
+These are basic fields to be created in your database
+
+title = models.CharField(max_length=100, db_index=True)
+slug = models.SlugField(max_length=100, db_index=True)
+body = models.TextField()
+posted = models.DateTimeField(db_index=True, auto_now_add=True)
+The last field, a little more advanced. This field populates its data from another database table, in this case Category, so you will need to populate the Category table field first.
+
+category = models.ForeignKey('blog.Category')
+Finish the model
+
+There are a few more things to be added to the model now that we have decided on the database structure. Your completed model file should look as follows.
+
+from django.db import models
+from django.db.models import permalink
+
+# Create your models here.
+
+class Blog(models.Model):
+    title = models.CharField(max_length=100, unique=True)
+    slug = models.SlugField(max_length=100, unique=True)
+    body = models.TextField()
+    posted = models.DateTimeField(db_index=True, auto_now_add=True)
+    category = models.ForeignKey('blog.Category')
+
+    def __unicode__(self):
+        return '%s' % self.title
+
+    @permalink
+    def get_absolute_url(self):
+        return ('view_blog_post', None, { 'slug': self.slug })
+
+class Category(models.Model):
+    title = models.CharField(max_length=100, db_index=True)
+    slug = models.SlugField(max_length=100, db_index=True)
+
+    def __unicode__(self):
+        return '%s' % self.title
+
+    @permalink
+    def get_absolute_url(self):
+        return ('view_blog_category', None, { 'slug': self.slug })
+What are all these extras for?
+
+The __unicode__ function sets the text reference for each record. This is used mainly in the automated django admin, but this is still available to use on your own site.
+
+The get_absolute_url function defines a URL, again used in the admin area, for each record.
+
+Without the @permalink decorator the following would not work. This returns a URL calculated from the urls.py file which will be explained shortly. I would recommend using this method as it allows you to change the URL for a page in only one location.
+
+return ('view_blog_post', None, { 'slug': self.slug })
+Example
+
+Title: How to create a basic blog in django
+Response from __unicode__: How to create a basic blog in django
+Response from get_absolute_url: /blog/view/how-to-create-a-basic-blog-in-django.html
+
+Limitations from this example
+
+Blog has a field slug. This is used as the URL to identify the post. In this case both the title & slug field are set to unique. It is not unreasonable to have two posts with the same Title. To solve this you could set the slug field to contain the ID of the post ie. 2-my-second-post
+This example allows only one category per post. This is quite simple to change by adding a ManyToMany field type to category instead of ForeignKey. The way you use this is sligthly different, so it will not work without other changes to this tutorial.
+
+
+
+How to create a basic blog in Django » Configuring the automatic admin
+In many of your own applications you will probably want to write your own administration functions, you will completely miss out this section.
+
+Create admin.py in blog folder we created earlier. This admin.py file is automatically checked by django admin for every application defined under INSTALLED_APPS in the settings.py
+
+from django.contrib import admin
+from blog.models import Blog, Category
+
+admin.site.register(Blog)
+admin.site.register(Category)
+Now lets see what each part means.
+
+Import the command which allows us to register the model we created
+
+from django.contrib import admin
+Import our models
+
+from blog.models import Blog, Category
+Register our models Blog & Category with the admin
+
+admin.site.register(Blog)
+admin.site.register(Category)
+Although these three lines are enough to get the admin working, we want to add a little more functionality. Heres the final admin.py.
+
+from django.contrib import admin
+from djangorocks.blog.models import Blog, Category
+
+class BlogAdmin(admin.ModelAdmin):
+    exclude = ['posted']
+    prepopulated_fields = {'slug': ('title',)}
+
+class CategoryAdmin(admin.ModelAdmin):
+    prepopulated_fields = {'slug': ('title',)}
+
+admin.site.register(Blog, BlogAdmin)
+admin.site.register(Category, CategoryAdmin)
+Now that you have added these models into the admin, you might want to login and add a few categories and blog posts.
+
+Limitations from this example
+The prepopulated_fields are exactly as they sound. The data for the slug field is automatically populated by the data entered in the to title field. Remember this ONLY works in the django admin so if you are not using this, the slug field will not be populated.
+The excluded field in this instance again is automatically populated with the date it was created. Remember this ONLY works in the django admin so if you are not using this, the date field will not be populated.
+A good way to solve these problems is to update your models with a save function.
+
+
+
+
+How to create a basic blog in Django » Writing the views & Defining your URL's
+The view is where you do all the logic to be sent to your templates. In this example we will not be dealing with RequestContext. This would give you access to the request object which contains details for the currently logged in user, as well as a few other features you will be likely to use in the future.
+
+For this example we need to create 3 views.
+
+Display your categories & latest posts
+Display the posts in a specific category
+Display the post
+Here is a copy of the view.py.
+
+# Create your views here.
+
+from djangorocks.blog.models import Blog, Category
+from django.shortcuts import render_to_response, get_object_or_404
+
+def index(request):
+    return render_to_response('index.html', {
+        'categories': Category.objects.all(),
+        'posts': Blog.objects.all()[:5]
+    })
+
+def view_post(request, slug):   
+    return render_to_response('view_post.html', {
+        'post': get_object_or_404(Blog, slug=slug)
+    })
+
+def view_category(request, slug):
+    category = get_object_or_404(Category, slug=slug)
+    return render_to_response('view_category.html', {
+        'category': category,
+        'posts': Blog.objects.filter(category=category)[:5]
+    })
+As with the admin.py file we need to import the models.
+
+from djangorocks.blog.models import Blog, Category
+We also need to import a couple of functions for displaying our template.
+
+from django.shortcuts import render_to_response, get_object_or_404
+The following is for your index page, which will display a list of all your categories, and 5 most recent posts.
+
+When defining functions, you always need to specify the variable request. This is the request object, which contains details of the User, POST & GET data as well as a few other bits. In the following instance we are also specifying slug which is mapped to from the urls.py file as you will see in a minute
+
+def view_category(request, slug):
+This first part sets the template file that we are going to be using.
+
+render_to_response('test.html', {
+The next part queries the database for both categories and posts. Category and Blog are the names of the models we created earlier.
+
+'categories': Category.objects.all(),
+'posts': Blog.objects.all()[:5]
+In the other two functions view_post & view_category we use one of the rather useful Django shortcuts. This queries the database trying to match where slug=slug, the first slug being the field in the model, the second slug being the input into the function call, more on this in a second when we define the URL's.
+
+get_object_or_404(Blog, slug=slug)
+Defining your URLs
+Open up the urls.py located in your project folder, add the following 3 lines.
+
+(r'^$', 'djangorocks.blog.views.index'),
+url(
+    r'^blog/view/(?P<slug>[^\.]+).html', 
+    'djangorocks.blog.views.view_post', 
+    name='view_blog_post'),
+url(
+    r'^blog/category/(?P<slug>[^\.]+).html', 
+    'djangorocks.blog.views.view_category', 
+    name='view_blog_category'),
+The first URL match is just a simple match nothing, ie http://www.yourdomain.com/, and mapping that through to the view index. The second two have custom variables being passed to the view. There are just regular expressions with the parameter matching syntax of django.
+
+(?P<slug>[^\.]+)
+As I always use the .html extension on my URL's this works fine for me. This matches everything up to '.', there are other ways of doing this, and it maps the result to slug which is also the name of a parameter in the view_post and view_category functions.
+
+The final part labeled name is what we used when defining the models. get_absolute_url returns a URL automatically calculated based on the URL that is entered here. Defining this just once means that if you change the mapping URL, it will also change throughout the site. You are also able to use the template tag that Django provides to do a similar thing, however this is not used in our example.
+
+
+
+
+
+How to create a basic blog in Django » Writing the templates
+The templating system in django is extremely powerful, we will only be using a small handful of its functionality in this example.
+
+Firstly, lets create our base template. This is just a very basic example, which is not valid XHTML. This template alone doesn't do a great deal.
+
+base.html
+
+<html>
+    <head>
+        <title>{% block head_title %}Welcome to my blog{% endblock %}</title>
+    </head>
+    <body>
+        <h1>{% block title %}Welcome to my block{% endblock %}</h1>
+        {% block content %}
+
+        {% endblock %}
+    </body>
+</html>
+index.html
+
+{% extends 'base.html' %}
+{% block title %}Welcome to my blog{% endblock %}
+
+{% block content %}
+    <h2>Categories</h2>
+    {% if categories %}
+        <ul>
+        {% for category in categories %}
+            <li><a href="{{ category.get_absolute_url }}">{{ category.title }}</a></li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>There are no posts.</p>
+    {% endif %}
+
+    <h2>Posts</h2>
+    {% if posts %}
+        <ul>
+        {% for post in posts %}
+            <li><a href="{{ post.get_absolute_url }}">{{ post.title }}</a></li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>There are no posts.</p>
+    {% endif %}
+
+{% endblock %}
+view_post.html
+
+{% extends 'base.html' %} 
+{% block head_title %}{{ post.title }}{% endblock %}
+{% block title %}{{ post.title }}{% endblock %}
+
+{% block content %}
+    {{ post.body }}
+{% endblock %}
+view_category.html
+
+{% extends 'base.html' %} 
+{% block head_title %}Viewing category {{ category.title }}{% endblock %}
+{% block title %}{{ category.title }}{% endblock %}
+
+{% block content %}
+    {% if posts %}
+        <ul>
+        {% for post in posts %}
+            <li><a href="{{ post.get_absolute_url }}">{{ post.title }}</a></li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>There are no posts.</p>
+    {% endif %}
+{% endblock %}
+So, what does all this do?
+In the base.html we are defining the base content, <html>, <body> etc, as well as the blocks we would like to display. The content for these is output based on the content that extends the base template.
+
+On the first line of all three of the other files you will notice
+
+{% extends 'base.html' %}
+This line calls the base.html template file. Inside this we define the blocks very much the same way as in the base.html file, however this time we add the content we want to display. Using the example from index.html
+
+We define the block for content,
+
+{% block content %}
+    ...
+{% endblock %}
+Inside here we are checking if there are an categories. The variables we use here were defined in the views.py file in the render_to_response function.
+
+{% if categories %}
+    ....
+{% else %}
+    <p>There are no posts.</p>
+{% endif %}
+If there are categories, the following is run
+
+<ul>
+    {% for category in categories %}
+        <li><a href="{{ category.get_absolute_url }}">{{ category.title }}</a></li>
+    {% endfor %}
+</ul>
+This will loop the response from the Category model as defined in views.py, and print out the results that are entered into the database.
